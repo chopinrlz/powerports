@@ -188,7 +188,14 @@ namespace PowerPorts {
         /// </summary>
         /// <param name="server">The IP address of the server.</param>
         /// <param name="port">The port number.</param>
+        /// <exception cref="ArgumentNullException">The server argument is null or empty.</exception>
+        /// <exception cref="ArgumentException">The port specified is out of range. Valid ports are between 1 and 65535.</exception>
+        /// <exception cref="FormatException">The server specified is not a valid IPv4 address.</exception>
         public void StartScan( string server, int port ) {
+            // Throw for illegal arguments
+            if( string.IsNullOrEmpty( server ) ) throw new ArgumentNullException( "server" );
+            if( port < 1 || port > 65535 ) throw new ArgumentException( "port" );
+
             // Generate a session key
             var key = TcpScannerSession.GenerateKey( server, port );
 
