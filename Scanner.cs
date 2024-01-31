@@ -177,6 +177,9 @@ namespace PowerPorts {
             }
         }
 
+        /// <summary>
+        /// Gets the collection of all the scanner results.
+        /// </summary>
         public ConcurrentBag<TcpScannerResult> Results {
             get {
                 return _results;
