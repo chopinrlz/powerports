@@ -7,6 +7,13 @@
 $scanner = Get-Content "$PSScriptRoot\Scanner.cs" -Raw
 Add-Type -TypeDefinition $scanner -Language CSharp
 
+function Get-PwpPorts {
+    [System.Enum]::GetValues( [PowerPorts.TcpService] ) | % {
+        [int]$x = $_
+        Write-Output "$_ = $x"
+    }
+}
+
 function Get-PwpSubnet {
     param(
         [string]
@@ -52,7 +59,17 @@ function Test-PwpHostOrIp {
         }
     } process {
         foreach( $port in $Ports ) {
-            $scanner.StartScan( $Ipv4Addr, $port )
+            $portNumber = 0
+            if( ($port.GetType().Name) -eq "String" ) {
+                $portNumber = [System.Enum]::Parse( [PowerPorts.TcpService], $port )
+            } else {
+                $portNumber = $port
+            }
+            if( $portNumber -le 0 ) {
+                Write-Warning "$port is not a valid TCP port"
+            } else {
+                $scanner.StartScan( $Ipv4Addr, $portNumber )
+            }
         }
     } end {
         while( $true ) {
