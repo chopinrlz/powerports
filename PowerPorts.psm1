@@ -82,3 +82,61 @@ function Test-PwpHostOrIp {
         Write-Output ($scanner.Results)
     }    
 }
+
+function Read-PwpDataFromPort {
+    <#
+        .SYNOPSIS
+        Opens a listening socket on any TCP port, awaits data then outputs it to the host or to a file.
+        .PARAMETER PortNumber
+        The TCP port number to listen on.
+        .PARAMETER Buffer
+        An optional buffer length indicator. By default, this is 1024 bytes.
+        .PARAMETER Path
+        If specified, the data received on the socket will be written to this file.
+        .PARAMETER Encoding
+        The text encoding to use when outputting the data to the host.
+    #>
+    param(
+        [Parameter(Mandatory,Position = 0,ValueFromPipeline)]
+        [ValidateRange(1,65535)]
+        [int]$PortNumber,
+        [ValidateRange(1024,1073741824)]
+        [int]$Buffer = 1024,
+        $Path,
+        [ValidateSet("Ascii","Utf8","Unicode")]
+        $Encoding = "Ascii"
+    )
+    $data = [System.Array]::CreateInstance( [byte], $Buffer )
+    if( $data ) {
+        $server = Get-PwpSocketListener $PortNumber
+        $server.Start()
+        $stream = ($server.AcceptTcpClient()).GetStream()
+        $dataRead = $stream.Read( $data, 0, $Buffer )
+        $stream.Close()
+        $server.Stop()
+        if( $Path ) {
+            $fs = [System.IO.File]::OpenWrite( $Path )
+            if( $fs ) {
+                $fs.Write( $data, 0, $dataRead )
+                $fs.Close()
+            }
+        } else {
+            $enc = switch( $Encoding ) {
+                "Ascii" { [System.Text.Encoding]::ASCII }
+                "Utf8" { [System.Text.Encoding]::UTF8 }
+                "Unicode" { [System.Text.Encoding]::Unicode }
+            }
+            Write-Output ($enc.GetString( $data, 0, $dataRead ))
+        }
+    } else {
+        Write-Warning "Failed to allocate read buffer"
+    }
+}
+
+function Get-PwpSocketListener {
+    param(
+        [Parameter(Mandatory,Position = 0)]
+        [int]$PortNumber
+    )
+    Write-Output (New-Object -TypeName "System.Net.Sockets.TcpListener" -ArgumentList (New-Object -TypeName "System.Net.IPEndPoint" -ArgumentList @( [IPAddress]::Any, $PortNumber )) )
+}
