@@ -7,6 +7,9 @@
 $scanner = Get-Content "$PSScriptRoot\Scanner.cs" -Raw
 Add-Type -TypeDefinition $scanner -Language CSharp
 
+$interrogator = Get-Content "$PSScriptRoot\Interrogator.cs" -Raw
+Add-Type -TypeDefinition $interrogator -Language CSharp
+
 function Get-PwpPorts {
     [System.Enum]::GetValues( [PowerPorts.TcpService] ) | % {
         [int]$x = $_
@@ -139,4 +142,63 @@ function Get-PwpSocketListener {
         [int]$PortNumber
     )
     Write-Output (New-Object -TypeName "System.Net.Sockets.TcpListener" -ArgumentList (New-Object -TypeName "System.Net.IPEndPoint" -ArgumentList @( [IPAddress]::Any, $PortNumber )) )
+}
+
+function Get-PwpInterrogate {
+    <#
+        .SYNOPSIS
+        Interrogates the target host and outputs the response to the pipeline.
+        .PARAMETER Hostname
+        Specify the target host using a hostname.
+        .PARAMETER Ipv4Addr
+        Specify the target host using an IPv4 address.
+        .PARAMETER Port
+        Specify the target TCP port to interrogate.
+    #>
+    param(
+        [Parameter(ParameterSetName="Hostname",Mandatory,Position=0)]
+        [string]
+        $Hostname,
+        [Parameter(ParameterSetName="IpAddr",Mandatory,Position=0)]
+        [string]
+        $Ipv4Addr,
+        [Parameter(ParameterSetName="Hostname",Mandatory,Position=1,ValueFromPipeline)]
+        [Parameter(ParameterSetName="IpAddr",Mandatory,Position=1,ValueFromPipeline)]
+        [int]
+        $Port,
+        [Parameter(ParameterSetName="Hostname",Position=2,ValueFromPipeline)]
+        [Parameter(ParameterSetName="IpAddr",Position=2,ValueFromPipeline)]
+        [string]
+        $Greeting
+    )
+    begin {
+        $intg = New-Object -TypeName "PowerPorts.TcpInterrogator"
+        if( $Hostname ) {
+            $Ipv4Addr = (Resolve-DnsName -Name $Hostname | ? Type -eq A).IPAddress
+        }
+    } process {
+        $portNumber = 0
+        if( ($port.GetType().Name) -eq "String" ) {
+            $portNumber = [System.Enum]::Parse( [PowerPorts.TcpService], $port )
+        } else {
+            $portNumber = $port
+        }
+        if( $portNumber -le 0 ) {
+            Write-Warning "$port is not a valid TCP port"
+        } else {
+            if( $Greeting ) {
+                $intg.Greeting = $Greeting
+            }
+            $intg.Interrogate( $Ipv4Addr, $portNumber )
+        }
+    } end {
+        while( $true ) {
+            if( $intg.IsProcessing ) {
+                Start-Sleep 1
+            } else {
+                break;
+            }
+        }
+        Write-Output ($intg.Response)
+    }   
 }
