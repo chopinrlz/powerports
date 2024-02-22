@@ -116,18 +116,15 @@ namespace PowerPorts {
                 // Check for connection and read response
                 if( connected ) {
                     // Pull the stream
-                    Console.WriteLine( "Connected" );
                     var stream = client.GetStream();
 
                     // Send a message to the host
                     if( !String.IsNullOrEmpty( Greeting ) ) {    
-                        Console.WriteLine( "Sending greeting" );
                         var hello = _msgEncoding.GetBytes( Greeting );
                         stream.Write( hello, 0, hello.Length );
                     }
 
                     // Read from the host
-                    Console.WriteLine( "Reading reply" );
                     byte[] buffer = new byte[1024];
                     var read = stream.Read( buffer, 0, buffer.Length );
                     if( read > 0 ) {
@@ -139,7 +136,6 @@ namespace PowerPorts {
                 client.Dispose();
                 client = null;
             } finally {
-                Console.WriteLine( "Disconnecting" );
                 IsProcessing = false;
             }
         }
