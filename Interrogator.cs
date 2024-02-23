@@ -10,12 +10,14 @@ namespace PowerPorts {
     /// <summary>
     /// Implements a TCP service interrogator.
     /// </summary>
-    public class TcpInterrogator {
+    public class TcpInterrogator : IDisposable {
 
         #region Fields
         private AsyncCallback _connectCallback;
         private bool _isProcessing = true;
         private Encoding _msgEncoding = Encoding.UTF8;
+        private TcpClient _client;
+        private int _readTimeout = 5000;
         #endregion
 
         /// <summary>
@@ -23,6 +25,16 @@ namespace PowerPorts {
         /// </summary>
         public TcpInterrogator() {
             _connectCallback += new AsyncCallback( ConnectCallback );
+        }
+
+        /// <summary>
+        /// Closes all open resources.
+        /// </summary>
+        public void Dispose() {
+            if( _client != null ) {
+                _client.Dispose();
+                _client = null;
+            }
         }
 
         /// <summary>
@@ -67,6 +79,19 @@ namespace PowerPorts {
             private set;
         }
 
+        public int ReadTimeout {
+            get {
+                return _readTimeout;
+            }
+            set {
+                if( value > 100 && value < 30000 ) {
+                    _readTimeout = value;
+                } else {
+                    _readTimeout = 5000;
+                }
+            }
+        }
+
         /// <summary>
         /// Starts a port scan of a server and port. This method does not block.
         /// </summary>
@@ -87,10 +112,10 @@ namespace PowerPorts {
             var target = IPAddress.Parse( server );
 
             // Create a TCP connection
-            TcpClient client = new TcpClient();
+            _client = new TcpClient();
 
             // Initiate network-layer connection to the target host
-            client.BeginConnect( target, port, _connectCallback, client );
+            _client.BeginConnect( target, port, _connectCallback, _client );
         }
 
         /// <summary>
@@ -100,42 +125,34 @@ namespace PowerPorts {
         /// <param name="asr">The callback result.</param>
         private void ConnectCallback( IAsyncResult asr ) {
             try {
-                // Fetch the connection information
-                var client = asr.AsyncState as TcpClient;
-
                 // Call end connect and check the result
                 var connected = false;
                 try {
-                    client.EndConnect( asr );
+                    _client.EndConnect( asr );
                     connected = true;
                 } catch {
-                    // Not accepted
                     connected = false;
                 }
-
                 // Check for connection and read response
                 if( connected ) {
                     // Pull the stream
-                    var stream = client.GetStream();
-
-                    // Send a message to the host
-                    if( !String.IsNullOrEmpty( Greeting ) ) {    
-                        var hello = _msgEncoding.GetBytes( Greeting );
-                        stream.Write( hello, 0, hello.Length );
-                    }
-
-                    // Read from the host
-                    byte[] buffer = new byte[1024];
-                    var read = stream.Read( buffer, 0, buffer.Length );
-                    if( read > 0 ) {
-                        Response = _msgEncoding.GetString( buffer, 0, read );
+                    using( var stream = _client.GetStream() ) {
+                        // Send a message to the host
+                        if( !String.IsNullOrEmpty( Greeting ) ) {    
+                            var hello = _msgEncoding.GetBytes( Greeting );
+                            stream.Write( hello, 0, hello.Length );
+                        }
+                        // Read from the host
+                        byte[] buffer = new byte[1024];
+                        stream.ReadTimeout = _readTimeout;
+                        var read = stream.Read( buffer, 0, buffer.Length );
+                        if( read > 0 ) {
+                            Response = _msgEncoding.GetString( buffer, 0, read );
+                        }
                     }
                 }
-
-                // Kill the client
-                client.Dispose();
-                client = null;
             } finally {
+                // Notify waiting parties
                 IsProcessing = false;
             }
         }

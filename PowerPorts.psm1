@@ -103,6 +103,8 @@ function Read-PwpDataFromPort {
         [Parameter(Mandatory,Position = 0,ValueFromPipeline)]
         [ValidateRange(1,65535)]
         [int]$PortNumber,
+        [Parameter(Position = 1)]
+        [string]$Greeting,
         [ValidateRange(1024,1073741824)]
         [int]$Buffer = 1024,
         $Path,
@@ -111,9 +113,18 @@ function Read-PwpDataFromPort {
     )
     $data = [System.Array]::CreateInstance( [byte], $Buffer )
     if( $data ) {
+        $enc = switch( $Encoding ) {
+            "Ascii" { [System.Text.Encoding]::ASCII }
+            "Utf8" { [System.Text.Encoding]::UTF8 }
+            "Unicode" { [System.Text.Encoding]::Unicode }
+        }
         $server = Get-PwpSocketListener $PortNumber
         $server.Start()
         $stream = ($server.AcceptTcpClient()).GetStream()
+        if( $Greeting ) {
+            $bytes = $enc.GetBytes( $Greeting )
+            $stream.Write( $bytes, 0, $bytes.Length )
+        }
         $dataRead = $stream.Read( $data, 0, $Buffer )
         $stream.Close()
         $server.Stop()
@@ -124,11 +135,6 @@ function Read-PwpDataFromPort {
                 $fs.Close()
             }
         } else {
-            $enc = switch( $Encoding ) {
-                "Ascii" { [System.Text.Encoding]::ASCII }
-                "Utf8" { [System.Text.Encoding]::UTF8 }
-                "Unicode" { [System.Text.Encoding]::Unicode }
-            }
             Write-Output ($enc.GetString( $data, 0, $dataRead ))
         }
     } else {
@@ -142,6 +148,29 @@ function Get-PwpSocketListener {
         [int]$PortNumber
     )
     Write-Output (New-Object -TypeName "System.Net.Sockets.TcpListener" -ArgumentList (New-Object -TypeName "System.Net.IPEndPoint" -ArgumentList @( [IPAddress]::Any, $PortNumber )) )
+}
+
+function Get-PwpGreeting {
+    <#
+        .SYNOPSIS
+        Gets a string which contains a typical Greeting from a Client to a Server upon connection designed to be used with
+        Get-PwpInterrogate to scan network devices for service discovery.
+    #>
+    param(
+        [ValidateSet("SMTP","ESMTP","HTTP")]
+        $Type
+    )
+    switch( $Type ) {
+        "SMTP" {
+            Write-Output "HELO"
+        }
+        "ESMTP" {
+            Write-Output "EHLO"
+        }
+        "HTTP" {
+            Write-Output (Get-Content "$PSScriptRoot\HTTP.Request.txt" -Raw)
+        }
+    }
 }
 
 function Get-PwpInterrogate {
@@ -169,10 +198,16 @@ function Get-PwpInterrogate {
         [Parameter(ParameterSetName="Hostname",Position=2,ValueFromPipeline)]
         [Parameter(ParameterSetName="IpAddr",Position=2,ValueFromPipeline)]
         [string]
-        $Greeting
+        $Greeting,
+        [Parameter(ParameterSetName="Hostname",Position=3,ValueFromPipeline)]
+        [Parameter(ParameterSetName="IpAddr",Position=3,ValueFromPipeline)]
+        [ValidateRange(100,30000)]
+        [int]
+        $Timeout = 5000
     )
     begin {
         $intg = New-Object -TypeName "PowerPorts.TcpInterrogator"
+        $intg.ReadTimeout = $Timeout
         if( $Hostname ) {
             $Ipv4Addr = (Resolve-DnsName -Name $Hostname | ? Type -eq A).IPAddress
         }
@@ -192,13 +227,16 @@ function Get-PwpInterrogate {
             $intg.Interrogate( $Ipv4Addr, $portNumber )
         }
     } end {
-        while( $true ) {
+        $spin = 100
+        $wait = $Timeout
+        while( $wait -gt 0 ) {
             if( $intg.IsProcessing ) {
-                Start-Sleep 1
+                Start-Sleep -Milliseconds $spin
+                $wait -= $spin
             } else {
                 break;
             }
         }
         Write-Output ($intg.Response)
-    }   
+    }
 }
