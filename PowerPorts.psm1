@@ -198,16 +198,10 @@ function Get-PwpInterrogate {
         [Parameter(ParameterSetName="Hostname",Position=2,ValueFromPipeline)]
         [Parameter(ParameterSetName="IpAddr",Position=2,ValueFromPipeline)]
         [string]
-        $Greeting,
-        [Parameter(ParameterSetName="Hostname",Position=3,ValueFromPipeline)]
-        [Parameter(ParameterSetName="IpAddr",Position=3,ValueFromPipeline)]
-        [ValidateRange(100,30000)]
-        [int]
-        $Timeout = 5000
+        $Greeting
     )
     begin {
         $intg = New-Object -TypeName "PowerPorts.TcpInterrogator"
-        $intg.ReadTimeout = $Timeout
         if( $Hostname ) {
             $Ipv4Addr = (Resolve-DnsName -Name $Hostname | ? Type -eq A).IPAddress
         }
@@ -228,8 +222,7 @@ function Get-PwpInterrogate {
         }
     } end {
         $spin = 100
-        $wait = $Timeout
-        while( $wait -gt 0 ) {
+        while( $true ) {
             if( $intg.IsProcessing ) {
                 Start-Sleep -Milliseconds $spin
                 $wait -= $spin

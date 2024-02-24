@@ -17,7 +17,6 @@ namespace PowerPorts {
         private bool _isProcessing = true;
         private Encoding _msgEncoding = Encoding.UTF8;
         private TcpClient _client;
-        private int _readTimeout = 5000;
         #endregion
 
         /// <summary>
@@ -79,19 +78,6 @@ namespace PowerPorts {
             private set;
         }
 
-        public int ReadTimeout {
-            get {
-                return _readTimeout;
-            }
-            set {
-                if( value > 100 && value < 30000 ) {
-                    _readTimeout = value;
-                } else {
-                    _readTimeout = 5000;
-                }
-            }
-        }
-
         /// <summary>
         /// Starts a port scan of a server and port. This method does not block.
         /// </summary>
@@ -144,7 +130,6 @@ namespace PowerPorts {
                         }
                         // Read from the host
                         byte[] buffer = new byte[1024];
-                        stream.ReadTimeout = _readTimeout;
                         var read = stream.Read( buffer, 0, buffer.Length );
                         if( read > 0 ) {
                             Response = _msgEncoding.GetString( buffer, 0, read );
