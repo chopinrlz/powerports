@@ -150,6 +150,19 @@ function Get-PwpSocketListener {
     Write-Output (New-Object -TypeName "System.Net.Sockets.TcpListener" -ArgumentList (New-Object -TypeName "System.Net.IPEndPoint" -ArgumentList @( [IPAddress]::Any, $PortNumber )) )
 }
 
+function Get-PwpIpv4Address {
+    <#
+        .SYNOPSIS
+        Resolves a hostname to an IPv4 address, if it has one.
+    #>
+    param(
+        [Parameter(Mandatory,ValueFromPipeline,Position = 0)]
+        [string]
+        $Hostname
+    )
+    Write-Output ((Resolve-DnsName -Name $Hostname | Where-Object { $_.Type -eq "A" }).IPAddress)
+}
+
 function Get-PwpGreeting {
     <#
         .SYNOPSIS
@@ -157,7 +170,9 @@ function Get-PwpGreeting {
         Get-PwpInterrogate to scan network devices for service discovery.
     #>
     param(
+        [Parameter(Mandatory,Position = 0,ValueFromPipeline)]
         [ValidateSet("SMTP","ESMTP","HTTP")]
+        [string]
         $Type
     )
     switch( $Type ) {
@@ -182,45 +197,54 @@ function Get-PwpInterrogate {
         .PARAMETER Ipv4Addr
         Specify the target host using an IPv4 address.
         .PARAMETER Port
-        Specify the target TCP port to interrogate.
+        Specify the target TCP port to interrogate. Valid options are any number between 1 and 65535.
+        .PARAMETER Timeout
+        An optional timeout value in milliseconds, which defaults to 1 second.
+        Can be set to any value between 100 and 30,000 ms.
+        .PARAMETER Greeting
+        An optional greeting to send to the target host upon connection.
+        .PARAMETER PassThru
+        An optional switch to output an object to the pipeline with the results.
     #>
     param(
-        [Parameter(ParameterSetName="Hostname",Mandatory,Position=0)]
+        [Parameter(ParameterSetName="Hostname",Mandatory)]
         [string]
         $Hostname,
-        [Parameter(ParameterSetName="IpAddr",Mandatory,Position=0)]
+        [Parameter(ParameterSetName="IpAddr",Mandatory)]
         [string]
         $Ipv4Addr,
         [Parameter(ParameterSetName="Hostname",Mandatory,Position=1,ValueFromPipeline)]
         [Parameter(ParameterSetName="IpAddr",Mandatory,Position=1,ValueFromPipeline)]
+        [ValidateRange(1,65535)]
         [int]
         $Port,
-        [Parameter(ParameterSetName="Hostname",Position=2,ValueFromPipeline)]
-        [Parameter(ParameterSetName="IpAddr",Position=2,ValueFromPipeline)]
+        [Parameter(ParameterSetName="Hostname",Position=2)]
+        [Parameter(ParameterSetName="IpAddr",Position=2)]
+        [ValidateRange(100,30000)]
+        [int]
+        $Timeout = 1000,
+        [Parameter(ParameterSetName="Hostname",Position=3)]
+        [Parameter(ParameterSetName="IpAddr",Position=3)]
         [string]
-        $Greeting
+        $Greeting,
+        [Parameter(ParameterSetName="Hostname")]
+        [Parameter(ParameterSetName="IpAddr")]
+        [switch]
+        $PassThru
     )
-    begin {
+    begin { }
+    process {
         $intg = New-Object -TypeName "PowerPorts.TcpInterrogator"
+        if( $EnforceReadTimeout ) {
+            $intg.EnforceReadTimeout = $true
+        }
         if( $Hostname ) {
-            $Ipv4Addr = (Resolve-DnsName -Name $Hostname | ? Type -eq A).IPAddress
+            $Ipv4Addr = Get-PwpIpv4Address $Hostname
         }
-    } process {
-        $portNumber = 0
-        if( ($port.GetType().Name) -eq "String" ) {
-            $portNumber = [System.Enum]::Parse( [PowerPorts.TcpService], $port )
-        } else {
-            $portNumber = $port
+        if( $Greeting ) {
+            $intg.Greeting = $Greeting
         }
-        if( $portNumber -le 0 ) {
-            Write-Warning "$port is not a valid TCP port"
-        } else {
-            if( $Greeting ) {
-                $intg.Greeting = $Greeting
-            }
-            $intg.Interrogate( $Ipv4Addr, $portNumber )
-        }
-    } end {
+        $intg.Interrogate( $Ipv4Addr, $Port )
         $spin = 100
         while( $true ) {
             if( $intg.IsProcessing ) {
@@ -230,6 +254,20 @@ function Get-PwpInterrogate {
                 break;
             }
         }
-        Write-Output ($intg.Response)
+        if( $PassThru ) {
+            $payload = [PSCustomObject]@{
+                Hostname = $Hostname
+                Ipv4Addr = $Ipv4Addr
+                Port = $Port
+                Greeting = $Greeting
+                IsConnected = $intg.IsConnected
+                Response = $intg.Response
+                Timeout = $Timeout
+            }
+            Write-Output $payload
+        } else {
+            Write-Output ($intg.Response)
+        }
     }
+    end { }
 }

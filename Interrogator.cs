@@ -17,6 +17,7 @@ namespace PowerPorts {
         private bool _isProcessing = true;
         private Encoding _msgEncoding = Encoding.UTF8;
         private TcpClient _client;
+        private int _timeout = 5000;
         #endregion
 
         /// <summary>
@@ -79,6 +80,30 @@ namespace PowerPorts {
         }
 
         /// <summary>
+        /// Indicates whether or not the interrogator connected to the target host.
+        /// </summary>
+        public bool IsConnected {
+            get;
+            private set;
+        }
+
+        /// <summary>
+        /// Gets or sets the read timeout in milliseconds. The default value is 5 seconds.
+        /// </summary>
+        public int Timeout {
+            get {
+                return _timeout;
+            }
+            set {
+                if( value >= 100 && value <= 30000 ) {
+                    _timeout = value;
+                } else {
+                    _timeout = 5000;
+                }
+            }
+        }
+
+        /// <summary>
         /// Starts a port scan of a server and port. This method does not block.
         /// </summary>
         /// <param name="server">The IPv4 address of the server.</param>
@@ -87,8 +112,9 @@ namespace PowerPorts {
         /// <exception cref="ArgumentException">The port specified is out of range. Valid ports are between 1 and 65535.</exception>
         /// <exception cref="FormatException">The server specified is not a valid IPv4 address.</exception>
         public void Interrogate( string server, int port ) {
-            // Set the processing flag
-            IsProcessing = true;
+            // Clear flags
+            IsProcessing = false;
+            IsConnected = false;
 
             // Throw for illegal arguments
             if( string.IsNullOrEmpty( server ) ) throw new ArgumentNullException( "server" );
@@ -101,7 +127,14 @@ namespace PowerPorts {
             _client = new TcpClient();
 
             // Initiate network-layer connection to the target host
-            _client.BeginConnect( target, port, _connectCallback, _client );
+            try {
+                IsProcessing = true;
+                _client.BeginConnect( target, port, _connectCallback, _client );
+            } catch {
+                IsProcessing = false;
+                IsConnected = false;
+                throw;
+            }
         }
 
         /// <summary>
@@ -112,15 +145,14 @@ namespace PowerPorts {
         private void ConnectCallback( IAsyncResult asr ) {
             try {
                 // Call end connect and check the result
-                var connected = false;
                 try {
                     _client.EndConnect( asr );
-                    connected = true;
+                    IsConnected = true;
                 } catch {
-                    connected = false;
+                    IsConnected = false;
                 }
                 // Check for connection and read response
-                if( connected ) {
+                if( IsConnected ) {
                     // Pull the stream
                     using( var stream = _client.GetStream() ) {
                         // Send a message to the host
@@ -130,9 +162,16 @@ namespace PowerPorts {
                         }
                         // Read from the host
                         byte[] buffer = new byte[1024];
-                        var read = stream.Read( buffer, 0, buffer.Length );
-                        if( read > 0 ) {
-                            Response = _msgEncoding.GetString( buffer, 0, read );
+                        stream.ReadTimeout = Timeout;
+                        try {
+                            var read = stream.Read( buffer, 0, buffer.Length );
+                            if( read > 0 ) {
+                                Response = _msgEncoding.GetString( buffer, 0, read );
+                            } else {
+                                Response = String.Empty;
+                            }
+                        } catch {
+                            Response = null;
                         }
                     }
                 }
