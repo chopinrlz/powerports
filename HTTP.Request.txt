@@ -11,6 +11,4 @@ Sec-Fetch-Site: none
 Sec-Fetch-Mode: navigate
 Sec-Fetch-User: ?1
 Sec-Fetch-Dest: document
-Accept-Encoding: gzip, deflate, br
 Accept-Language: en-US,en;q=0.9
-
