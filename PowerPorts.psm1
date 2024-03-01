@@ -32,18 +32,55 @@ function Get-PwpPorts {
 }
 
 function Get-PwpSubnet {
-    param(
-        [string]
-        $Cidr
-    )
-    $parts = $Cidr -split '\.'
-    $end = $parts[3] -split '/'
-    $a = $parts[0]
-    $b = $parts[1]
-    $c = $parts[2]
-    $d = $end[0]
-    $s = $end[1]
-    "$a.$b.$c.$d/$s"
+    $myIp = ([System.Net.Dns]::GetHostEntry([System.Net.Dns]::GetHostName())).AddressList | Where-Object {
+        $_.AddressFamily -eq "InterNetwork"
+    }
+    if( -not $myIp ) {
+        throw "No local IPv4 address found"
+    }
+    if( $myIp.Length -gt 1 ) {
+        $myIp = $myIp[0]
+    }
+    $nics = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object {
+        ($_.OperationalStatus -eq "Up") -and ($_.NetworkInterfaceType -ne "Loopback")
+    }
+    if( -not $nics ) {
+        throw "No network adapters are online"
+    }
+    $mask = $null
+    foreach( $nic in $nics ) {
+        $ipProps = $nic.GetIPProperties()
+        foreach( $ua in $ipProps.UnicastAddresses ) {
+            if( $ua.Address -eq $myIp ) {
+                $mask = $ua.IPv4Mask
+            }
+        }
+    }
+    if( -not $mask ) {
+        throw "No IPv4 subnet mask found"
+    }
+    $ipBytes = $myIp.GetAddressBytes()
+    $snBytes = $mask.GetAddressBytes()
+
+    $hostBits = [System.BitConverter]::ToUInt32( $snBytes, 0 )
+
+    # 0 is 32 (LUT)
+    # 1 is 31 (LUT)
+    # 2 is 30
+    # 4 is 29
+    # 8 is 28
+    # 16 is 27
+    # 32 is 26
+    # 64 is 25
+    # 128 is 24
+    # 2 ^ x = 31 - x
+
+    # Create the classless subnet address from the IP address and the subnet mask
+    $subnet = [System.Array]::CreateInstance( [byte], 4 )
+    for( $i = 0; $i -lt $cidr.Length; $i++ ) {
+        $subnet[$i] = $snBytes[$i] -band $ipBytes[$i]
+    }
+    $subnetAddress = New-Object -TypeName "System.Net.IPAddres" -ArgumentList @($subnet)
 }
 
 function Test-PwpHostOrIp {
