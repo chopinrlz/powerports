@@ -4,16 +4,30 @@
     This software is provided AS IS without warranty.
 #>
 
-$scanner = Get-Content "$PSScriptRoot\Scanner.cs" -Raw
-Add-Type -TypeDefinition $scanner -Language CSharp
-
-$interrogator = Get-Content "$PSScriptRoot\Interrogator.cs" -Raw
-Add-Type -TypeDefinition $interrogator -Language CSharp
+Add-Type -TypeDefinition (Get-Content (Join-Path -Path $PSScriptRoot -ChildPath "Scanner.cs") -Raw) -Language CSharp
+Add-Type -TypeDefinition (Get-Content (Join-Path -Path $PSScriptRoot -ChildPath "Interrogator.cs") -Raw) -Language CSharp
 
 function Get-PwpPorts {
-    [System.Enum]::GetValues( [PowerPorts.TcpService] ) | % {
-        [int]$x = $_
-        Write-Output "$_ = $x"
+    <#
+        .SYNOPSIS
+        Gets a collection of TCP port numbers for many common services such as
+        SMTP, HTTP, SMB, FTP, and DNS.
+        .PARAMETER Names
+        Specify this switch to get the names of the ports rather than the numbers.
+        You can send the names or the numbers to the Test-PwPHostOrIp cmdlet.
+    #>
+    param( 
+        [switch]
+        $Names
+    )
+    if( $Names ) {
+        foreach( $p in [System.Enum]::GetNames( [PowerPorts.TcpService] ) ) {
+            Write-Output $p
+        }
+    } else {
+        foreach( $p in [System.Enum]::GetValues( [PowerPorts.TcpService] ) ) {
+            Write-Output $p
+        }
     }
 }
 
@@ -77,7 +91,7 @@ function Test-PwpHostOrIp {
     } end {
         while( $true ) {
             if( $scanner.IsProcessing ) {
-                Start-Sleep 1
+                Start-Sleep -Milliseconds 100
             } else {
                 break;
             }

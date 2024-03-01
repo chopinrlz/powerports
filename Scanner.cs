@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace PowerPorts {
 
     /// <summary>
-    /// Maps a TCP/IP service port to a service name.
+    /// Maps a common TCP/IP service port to a service name.
     /// </summary>
     public enum TcpService {
         Echo = 7,
@@ -21,9 +21,17 @@ namespace PowerPorts {
         Http = 80,
         Kerberos = 88,
         Pop3 = 110,
+		Imap = 143,
         HttpTls = 443,
         Smb = 445,
+		SmtpSsl = 465,
+		SmtpTls = 587,
+		DnsSec = 853,
+		ImapTls = 993,
         SqlServer = 1433,
+		OracleSql = 1520,
+		SmtpAlt = 2525,
+		MySql = 3306,
         HttpInternal = 8080
     }
 
