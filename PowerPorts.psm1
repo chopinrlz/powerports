@@ -31,7 +31,13 @@ function Get-PwpPorts {
     }
 }
 
-function Get-PwpSubnet {
+function Get-PwpSubnetAddresses {
+    <#
+        .SYNOPSIS
+        Outputs all the IPv4 addresses for this device's primray IPv4 network adapter.
+    #>
+
+    # Find the IPv4 address for the first network adapter
     $myIp = ([System.Net.Dns]::GetHostEntry([System.Net.Dns]::GetHostName())).AddressList | Where-Object {
         $_.AddressFamily -eq "InterNetwork"
     }
@@ -41,6 +47,8 @@ function Get-PwpSubnet {
     if( $myIp.Length -gt 1 ) {
         $myIp = $myIp[0]
     }
+
+    # Find the corresponding network adapter and extract the subnet mask
     $nics = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object {
         ($_.OperationalStatus -eq "Up") -and ($_.NetworkInterfaceType -ne "Loopback")
     }
@@ -59,28 +67,10 @@ function Get-PwpSubnet {
     if( -not $mask ) {
         throw "No IPv4 subnet mask found"
     }
-    $ipBytes = $myIp.GetAddressBytes()
-    $snBytes = $mask.GetAddressBytes()
 
-    $hostBits = [System.BitConverter]::ToUInt32( $snBytes, 0 )
-
-    # 0 is 32 (LUT)
-    # 1 is 31 (LUT)
-    # 2 is 30
-    # 4 is 29
-    # 8 is 28
-    # 16 is 27
-    # 32 is 26
-    # 64 is 25
-    # 128 is 24
-    # 2 ^ x = 31 - x
-
-    # Create the classless subnet address from the IP address and the subnet mask
-    $subnet = [System.Array]::CreateInstance( [byte], 4 )
-    for( $i = 0; $i -lt $cidr.Length; $i++ ) {
-        $subnet[$i] = $snBytes[$i] -band $ipBytes[$i]
-    }
-    $subnetAddress = New-Object -TypeName "System.Net.IPAddres" -ArgumentList @($subnet)
+    # Calculate the root IPv4 address
+    $rootAddress = [IPAddress](($myIp.Address) -band ($mask.Address))
+    1..999 | % { Write-Output ([IPAddress](($rootAddress.Address) + [IPAddress]::HostToNetworkOrder($_))) }
 }
 
 function Test-PwpHostOrIp {
